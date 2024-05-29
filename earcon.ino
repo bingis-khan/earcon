@@ -92,6 +92,11 @@ void setup() {
 
 ServoState prev;
 
+unsigned long lastBeatTime = 0;
+unsigned long lastInterval = 0;
+
+float bpm;
+
 void loop() {
   IMU.update();
   unsigned long now = millis();
@@ -112,14 +117,29 @@ void loop() {
   // int servo_orientation = map(pot, 0, 1023, 0, 180);
   // servo2.write(servo_orientation);
 
-  /* heartrate + leds */
+  
+
+  // Serial.println(heartSensor);
   int heartSensor = analogRead(SENSOR_PIN);
-  int colorValue = map(heartSensor, 0, 1023, 0, 255);
-  uint32_t newColor = strip.Color(colorValue, 255 - colorValue, (colorValue / 2));
+  unsigned long currentTime = millis();
+  const int threshold = 800;
+  if (heartSensor > threshold && currentTime - lastBeatTime > 250) {  // Debounce the signal (minimum time between beats)
+    lastInterval = currentTime - lastBeatTime;
+    lastBeatTime = currentTime;
+    bpm = 60000.0 / lastInterval;  // Calculate BPM
+    Serial.print("BPM: ");
+    Serial.println(bpm);
+  }
+
+  /* heart rate + leds */
+  const int heartMax = 150, heartMin = 90;
+  int heartClipped = min(max(0, bpm - heartMin), heartMax - heartMin);
+  int angerValue = map(heartClipped, 0, heartMax - heartMin, 0, 255);
+  int colorValue = 255 - angerValue; //map(heartSensor, 0, 1023, 0, 255);
+  uint32_t newColor = strip.Color(angerValue, colorValue, colorValue / 2);
   for (int i = 0; i < NUM_LEDS; i++) {
     strip.setPixelColor(i, newColor);
   }
-
   //strip.show();
 
 
@@ -155,18 +175,18 @@ void loop() {
     else if (hrotation > 30) servos.left_ear_up = 180 - ear_rot;
   }
 
+  unsigned int current = millis();
+  if (bpm > 140 || current - last_time > 250) {
+    strip.show();
+    last_time = current;
+  }
+
   if (memcmp(&servos, &prev, sizeof(ServoState)) != 0) {
     servo1.write(servos.left_ear_down);  //  0 - 180 (90 def)
     servo2.write(servos.left_ear_up);  // (180 - 120)-0?? (90 def)
     servo3.write(servos.right_ear_down);  // 0 - 180 (90 def)
     servo4.write(servos.right_ear_up);  // 0 - <130 (90 def)
     Serial.println("update state");
-  }
-
-  unsigned int current = millis();
-  if (current - last_time > 100) {
-    strip.show();
-    last_time = current;
   }
 
   prev = servos;
